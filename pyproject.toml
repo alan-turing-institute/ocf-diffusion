@@ -11,4 +11,5 @@ dependencies = [
     "cloudcasting @ git+https://github.com/alan-turing-institute/cloudcasting.git@v0.4.0",
     "diffusers[torch]",
     "matplotlib>=3.9.2",
+    "torchvision",
 ]
