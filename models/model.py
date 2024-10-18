@@ -60,8 +60,12 @@ class DiffusionModel(AbstractModel):
             y_hat_torch = self.forecast_one_timestep(tensors[-1])
             tensors.append(y_hat_torch)
 
-        # Results are all forecasts, converted to numpy arrays (ignoring the input)
-        results = [y_hat.detach().cpu().numpy() for y_hat in tensors[1:]]
+        # Convert results to the expected output format by doing the following:
+        # - convert back to the range (0, 1)
+        # - convert from Tensor to numpy array
+        # - drop the input from the list of results
+        # - concatenate the forecasts along the time axis
+        results = [((y_hat + 1) / 2).detach().cpu().numpy() for y_hat in tensors[1:]]
         return np.concatenate(results, axis=2)
 
 
