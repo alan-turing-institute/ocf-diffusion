@@ -1,7 +1,7 @@
-from cloudcasting.models import AbstractModel
-import diffusion
-from .conditioned_unet import ConditionedUnet
 import torch
+from cloudcasting.models import AbstractModel
+
+import diffusion
 
 # We define a new class that inherits from AbstractModel
 class DiffusionModel(AbstractModel):
@@ -20,7 +20,7 @@ class DiffusionModel(AbstractModel):
         # Here you can add any other parameters that you need to initialize your model
         # You might load your trained ML model or set up an optical flow method here.
         # You can also access any code from src/diffusion, e.g.
-        self.model = ConditionedUnet()
+        self.model = diffusion.ConditionedUnet()
         self.model.load_state_dict(torch.load(state_dict_path, weights_only=True))
         self.model.eval()
 
