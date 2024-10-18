@@ -1,7 +1,7 @@
 import torch
 import numpy as np
+from cloudcasting.constants import NUM_FORECAST_STEPS, IMAGE_SIZE_TUPLE
 from cloudcasting.models import AbstractModel
-from cloudcasting.constants import NUM_FORECAST_STEPS
 from diffusers import DDPMScheduler
 
 import diffusion
@@ -29,8 +29,11 @@ class DiffusionModel(AbstractModel):
         # Get the appropriate PyTorch device
         self.device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
 
+        # Calculate required crop for the input dims to be divisible by 16
+        self.cropped_image_size = [(size // 16) * 16 for size in IMAGE_SIZE_TUPLE]
+
         # Load the pretrained model
-        self.model = diffusion.ConditionedUnet()
+        self.model = diffusion.ConditionedUnet(image_size=self.cropped_image_size)
         self.model.load_state_dict(torch.load(state_dict_path, weights_only=True))
         self.model = self.model.to(self.device)
         self.model.eval()
@@ -38,17 +41,14 @@ class DiffusionModel(AbstractModel):
         self.noise_scheduler = DDPMScheduler(num_train_timesteps=1000, beta_schedule="squaredcos_cap_v2")
         ############################
 
-    @staticmethod
-    def crop(x):
-        # Calculate required crop for the input dims to be divisible by 16
-        x_cropped_shape = [(size // 16) * 16 for size in x.shape[-2:]]
-        return x[..., :x_cropped_shape[0], :x_cropped_shape[1]]
+    def crop(self, x: torch.Tensor) -> torch.Tensor:
+        return x[..., :self.cropped_image_size[0], :self.cropped_image_size[1]]
 
     def forward(self, X):
         # This is where you will make predictions with your model
         # The input X is a numpy array with shape (batch_size, channels, time, height, width)
 
-        # Get some data and prepare the corrupted version
+        # Get some data, crop to size and transform range
         X_torch = torch.Tensor(X, requires_grad=False)
         X_torch = self.crop(X_torch.to(self.device) * 2 - 1)  # Data on the GPU (mapped to (-1, 1)) (????)
 
