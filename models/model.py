@@ -54,18 +54,23 @@ class DiffusionModel(AbstractModel):
         # Load data onto the GPU, crop to size and transform range to (-1, 1)
         X_torch = self.crop(torch.from_numpy(X).to(self.device) * 2 - 1)
 
-        results = [X_torch]
+        tensors = [X_torch]
         for forecast_timestep in range(NUM_FORECAST_STEPS):
             print(f"Starting denoising loop for forecast {forecast_timestep + 1} / {NUM_FORECAST_STEPS}")
-            y_hat = self.forecast_one_step(results[-1])
-            results.append(y_hat.detach().cpu().numpy())
+            y_hat_torch = self.forecast_one_timestep(tensors[-1])
+            tensors.append(y_hat_torch)
 
-        return np.concatenate(results[1:], axis=2)
+        # Results are all forecasts, converted to numpy arrays (ignoring the input)
+        results = [y_hat.detach().cpu().numpy() for y_hat in tensors[1:]]
+        return np.concatenate(results, axis=2)
 
 
-    def forecast_one_step(self, X: torch.Tensor) -> torch.Tensor:
+    def forecast_one_timestep(self, X: torch.Tensor) -> torch.Tensor:
+        print(f"-> Input: {X.shape} {type(X)}")
+
         # Random noise with shape (batch_size, channels, 1, height, width)
         sampled_noise = torch.randn(X.shape[0], X.shape[1], 1, X.shape[3], X.shape[4]).to(self.device)
+        print(f"-> Noise: {sampled_noise.shape} {type(sampled_noise)}")
 
         # Sampling loop
         for idx, t in enumerate(self.noise_scheduler.timesteps):
