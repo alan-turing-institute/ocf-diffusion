@@ -48,9 +48,8 @@ class DiffusionModel(AbstractModel):
         # This is where you will make predictions with your model
         # The input X is a numpy array with shape (batch_size, channels, time, height, width)
 
-        # Get some data, crop to size and transform range
-        X_torch = torch.Tensor(X, requires_grad=False)
-        X_torch = self.crop(X_torch.to(self.device) * 2 - 1)  # Data on the GPU (mapped to (-1, 1)) (????)
+        # Load data onto the GPU, crop to size and transform range to (-1, 1)
+        X_torch = self.crop(torch.from_numpy(X).to(self.device) * 2 - 1)
 
         results = [X_torch]
         for forecast_timestep in range(NUM_FORECAST_STEPS):
