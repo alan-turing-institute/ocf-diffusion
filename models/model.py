@@ -1,9 +1,10 @@
+import time
 import torch
-import tqdm
 import numpy as np
 from cloudcasting.constants import NUM_FORECAST_STEPS, IMAGE_SIZE_TUPLE
 from cloudcasting.models import AbstractModel
 from diffusers import DDPMScheduler
+from tqdm import tqdm
 
 import diffusion
 
@@ -61,18 +62,23 @@ class DiffusionModel(AbstractModel):
 
         # Load data onto the GPU and transform range to (-1, 1)
         X_torch = torch.from_numpy(X).to(self.device) * 2 - 1
-        print(f"Running forward step using an input of shape: {X_torch.shape}")
+        tqdm.write(f"Running forward step using an input of shape: {X_torch.shape}")
 
         # Crop to size
         X_torch_cropped = self.crop(X_torch)
-        print(f"Cropping to an appropriate shape: {X_torch_cropped.shape}")
+        tqdm.write(f"Cropping to an appropriate shape: {X_torch_cropped.shape}")
 
         # Forecast the next timestep taking the previous timestep as input
         tensors = [X_torch_cropped]
-        for forecast_timestep in range(NUM_FORECAST_STEPS):
-            print(f"Starting denoising loop for forecast {forecast_timestep + 1} / {NUM_FORECAST_STEPS}")
+        start_time = time.monotonic()
+        for _ in range(NUM_FORECAST_STEPS):
             y_hat_torch = self.forecast_one_timestep(tensors[-1])
             tensors.append(y_hat_torch)
+        elapsed = time.monotonic() - start_time
+        tqdm.write(
+            f"Generated {NUM_FORECAST_STEPS} forecasts in"
+            f" {elapsed // 60:.0f}m{elapsed % 60:.0f}s"
+        )
 
         # Convert results to the expected output format by doing the following:
         # - uncrop back to the original size (filling missing values with values from input)
@@ -82,7 +88,7 @@ class DiffusionModel(AbstractModel):
         # - concatenate the forecasts along the time axis
         results = [((self.uncrop(y_hat, target=X_torch) + 1) / 2).detach().cpu().numpy() for y_hat in tensors[1:]]
         output = np.concatenate(results, axis=2)
-        print(f"Converting forecasts to an appropriate shape: {output.shape}")
+        tqdm.write(f"Converting forecasts to an appropriate shape: {output.shape}")
         return np.nan_to_num(output, nan=0, posinf=0)
 
 
@@ -90,15 +96,15 @@ class DiffusionModel(AbstractModel):
         # Random noise with shape (batch_size, channels, 1, height, width)
         sampled_noise = torch.randn(X.shape[0], X.shape[1], 1, X.shape[3], X.shape[4]).to(self.device)
 
-        # Sampling loop
-        for t in tqdm.tqdm(self.noise_scheduler.timesteps):
+        # Sequentially predict the previous timestep
+        for timestep in self.noise_scheduler.timesteps:
 
             # Get the model prediction for residual noise
             with torch.no_grad():
-                residual = self.model(sampled_noise, X, t)
+                residual = self.model(sampled_noise, X, timestep)
 
             # Combine the residual with the input to generate the input for the next step
-            sampled_noise = self.noise_scheduler.step(residual, t, sampled_noise).prev_sample
+            sampled_noise = self.noise_scheduler.step(residual, timestep, sampled_noise).prev_sample
 
         return sampled_noise
 
