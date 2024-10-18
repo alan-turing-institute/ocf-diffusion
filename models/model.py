@@ -82,16 +82,13 @@ class DiffusionModel(AbstractModel):
         # - concatenate the forecasts along the time axis
         results = [((self.uncrop(y_hat, target=X_torch) + 1) / 2).detach().cpu().numpy() for y_hat in tensors[1:]]
         output = np.concatenate(results, axis=2)
-        print(f"Returning {output.shape} {type(output)}")
-        return output
+        print(f"Converting forecasts to an appropriate shape: {output.shape}")
+        return np.nan_to_num(output, nan=0, posinf=0)
 
 
     def forecast_one_timestep(self, X: torch.Tensor) -> torch.Tensor:
-        print(f"-> Input: {X.shape} {type(X)}")
-
         # Random noise with shape (batch_size, channels, 1, height, width)
         sampled_noise = torch.randn(X.shape[0], X.shape[1], 1, X.shape[3], X.shape[4]).to(self.device)
-        print(f"-> Noise: {sampled_noise.shape} {type(sampled_noise)}")
 
         # Sampling loop
         for t in tqdm.tqdm(self.noise_scheduler.timesteps):
@@ -103,7 +100,6 @@ class DiffusionModel(AbstractModel):
             # Combine the residual with the input to generate the input for the next step
             sampled_noise = self.noise_scheduler.step(residual, t, sampled_noise).prev_sample
 
-        print(f"-> Output: {sampled_noise.shape} {type(sampled_noise)}")
         return sampled_noise
 
 
