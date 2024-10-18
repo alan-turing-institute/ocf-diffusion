@@ -1,4 +1,5 @@
 import torch
+import tqdm
 import numpy as np
 from cloudcasting.constants import NUM_FORECAST_STEPS, IMAGE_SIZE_TUPLE
 from cloudcasting.models import AbstractModel
@@ -66,7 +67,9 @@ class DiffusionModel(AbstractModel):
         # - drop the input from the list of results
         # - concatenate the forecasts along the time axis
         results = [((y_hat + 1) / 2).detach().cpu().numpy() for y_hat in tensors[1:]]
-        return np.concatenate(results, axis=2)
+        output = np.concatenate(results, axis=2)
+        print(f"Returning {output.shape} {type(output)}")
+        return output
 
 
     def forecast_one_timestep(self, X: torch.Tensor) -> torch.Tensor:
@@ -77,16 +80,16 @@ class DiffusionModel(AbstractModel):
         print(f"-> Noise: {sampled_noise.shape} {type(sampled_noise)}")
 
         # Sampling loop
-        for idx, t in enumerate(self.noise_scheduler.timesteps):
+        for idx, t in enumerate(tqdm.tqdm(self.noise_scheduler.timesteps)):
 
             # Get model pred
             with torch.no_grad():
                 residual = self.model(sampled_noise, X, t)
-            print(f"... obtained residual for step {idx} / {self.noise_scheduler.timesteps}")
+            print(f"... obtained residual for step {idx} / {self.noise_scheduler.timesteps.shape[0]}")
 
             # Update sample with step
             sampled_noise = self.noise_scheduler.step(residual, t, sampled_noise).prev_sample
-            print(f"... updated sampled noise for step {idx} / {self.noise_scheduler.timesteps}")
+            print(f"... updated sampled noise for step {idx} / {self.noise_scheduler.timesteps.shape[0]}")
 
         return sampled_noise
 
