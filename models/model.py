@@ -48,6 +48,9 @@ class DiffusionModel(AbstractModel):
     def crop(self, x: torch.Tensor) -> torch.Tensor:
         return x[..., :self.cropped_image_size[0], :self.cropped_image_size[1]]
 
+    def uncrop(self, x: torch.Tensor) -> torch.Tensor:
+        return x[..., :IMAGE_SIZE_TUPLE[0], :IMAGE_SIZE_TUPLE[1]]
+
     def forward(self, X):
         # This is where you will make predictions with your model
         # The input X is a numpy array with shape (batch_size, channels, time, height, width)
@@ -55,6 +58,7 @@ class DiffusionModel(AbstractModel):
         # Load data onto the GPU, crop to size and transform range to (-1, 1)
         X_torch = self.crop(torch.from_numpy(X).to(self.device) * 2 - 1)
 
+        # Forecast the next timestep taking the previous timestep as input
         tensors = [X_torch]
         for forecast_timestep in range(NUM_FORECAST_STEPS):
             print(f"Starting denoising loop for forecast {forecast_timestep + 1} / {NUM_FORECAST_STEPS}")
@@ -62,11 +66,12 @@ class DiffusionModel(AbstractModel):
             tensors.append(y_hat_torch)
 
         # Convert results to the expected output format by doing the following:
+        # - uncrop back to the original size (filling missing values with zeros)
         # - convert back to the range (0, 1)
         # - convert from Tensor to numpy array
         # - drop the input from the list of results
         # - concatenate the forecasts along the time axis
-        results = [((y_hat + 1) / 2).detach().cpu().numpy() for y_hat in tensors[1:]]
+        results = [((self.uncrop(y_hat) + 1) / 2).detach().cpu().numpy() for y_hat in tensors[1:]]
         output = np.concatenate(results, axis=2)
         print(f"Returning {output.shape} {type(output)}")
         return output
