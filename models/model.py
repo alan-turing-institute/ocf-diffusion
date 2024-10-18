@@ -12,7 +12,7 @@ import diffusion
 class DiffusionModel(AbstractModel):
     """DiffusionModel model class"""
 
-    def __init__(self, history_steps: int, state_dict_path: str) -> None:
+    def __init__(self, history_steps: int, state_dict_path: str, num_train_timesteps: int) -> None:
         # All models must include `history_steps` as a parameter. This is the number of previous
         # frames that the model uses to makes its predictions. This should not be more than 25, i.e.
         # 6 hours (inclusive of end points) of 15 minutely data.
@@ -38,7 +38,10 @@ class DiffusionModel(AbstractModel):
         self.model = self.model.to(self.device)
         self.model.eval()
 
-        self.noise_scheduler = DDPMScheduler(num_train_timesteps=1000, beta_schedule="squaredcos_cap_v2")
+        self.noise_scheduler = DDPMScheduler(
+            num_train_timesteps=num_train_timesteps,
+            beta_schedule="squaredcos_cap_v2"
+        )
         ############################
 
     def crop(self, x: torch.Tensor) -> torch.Tensor:
@@ -86,4 +89,6 @@ class DiffusionModel(AbstractModel):
         # This is just for your own reference and will be saved with the model scores to wandb
 
         ###### YOUR CODE HERE ######
-        pass
+        return {
+            "num_train_timesteps": self.noise_scheduler.timesteps,
+        }

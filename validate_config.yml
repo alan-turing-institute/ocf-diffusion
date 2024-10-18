@@ -2,6 +2,7 @@ model:
   name: "DiffusionModel"
   params:
     history_steps: 1
+    num_train_timesteps: 1000
     state_dict_path: /bask/projects/v/vjgo8416-climate/shared/cloudcasting-validation/ocf-diffusion/best-model-epoch-1-loss-0.101-state-dict.pt
 validation:
   data_path: "/bask/projects/v/vjgo8416-climate/shared/data/eumetsat/testing2022/2022_test_nonhrv.zarr"
