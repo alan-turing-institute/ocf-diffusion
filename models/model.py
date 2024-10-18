@@ -1,11 +1,13 @@
 from cloudcasting.models import AbstractModel
 import diffusion
+from .conditioned_unet import ConditionedUnet
+import torch
 
 # We define a new class that inherits from AbstractModel
 class DiffusionModel(AbstractModel):
     """DiffusionModel model class"""
 
-    def __init__(self, history_steps: int, example_parameter: int) -> None:
+    def __init__(self, history_steps: int, state_dict_path: str) -> None:
         # All models must include `history_steps` as a parameter. This is the number of previous
         # frames that the model uses to makes its predictions. This should not be more than 25, i.e.
         # 6 hours (inclusive of end points) of 15 minutely data.
@@ -18,7 +20,9 @@ class DiffusionModel(AbstractModel):
         # Here you can add any other parameters that you need to initialize your model
         # You might load your trained ML model or set up an optical flow method here.
         # You can also access any code from src/diffusion, e.g.
-        x = diffusion.load_model()
+        self.model = ConditionedUnet()
+        self.model.load_state_dict(torch.load(state_dict_path, weights_only=True))
+        self.model.eval()
 
         ############################
 
@@ -38,4 +42,3 @@ class DiffusionModel(AbstractModel):
 
         ###### YOUR CODE HERE ######
         ...
-      
