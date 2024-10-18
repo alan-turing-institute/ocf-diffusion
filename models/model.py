@@ -53,6 +53,7 @@ class DiffusionModel(AbstractModel):
 
         results = [X_torch]
         for forecast_timestep in range(NUM_FORECAST_STEPS):
+            print(f"Starting denoising loop for forecast {forecast_timestep + 1} / {NUM_FORECAST_STEPS}")
             y_hat = self.forecast_one_step(results[-1])
             results.append(y_hat.detach().cpu().numpy())
 
@@ -64,17 +65,16 @@ class DiffusionModel(AbstractModel):
         sampled_noise = torch.randn(X.shape[0], X.shape[1], 1, X.shape[3], X.shape[4]).to(self.device)
 
         # Sampling loop
-        print("starting denoising loop")
         for idx, t in enumerate(self.noise_scheduler.timesteps):
 
             # Get model pred
             with torch.no_grad():
                 residual = self.model(sampled_noise, X, t)
-            print(f"... obtained residual for step {idx}")
+            print(f"... obtained residual for step {idx} / {self.noise_scheduler.timesteps}")
 
             # Update sample with step
             sampled_noise = self.noise_scheduler.step(residual, t, sampled_noise).prev_sample
-            print(f"... updated sampled noise for step {idx}")
+            print(f"... updated sampled noise for step {idx} / {self.noise_scheduler.timesteps}")
 
         return sampled_noise
 
