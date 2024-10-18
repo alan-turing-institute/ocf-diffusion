@@ -1,7 +1,12 @@
 import torch
+import numpy as np
 from cloudcasting.models import AbstractModel
+from cloudcasting.constants import NUM_FORECAST_STEPS
+from diffusers import DDPMScheduler
 
 import diffusion
+
+
 
 # We define a new class that inherits from AbstractModel
 class DiffusionModel(AbstractModel):
@@ -20,19 +25,60 @@ class DiffusionModel(AbstractModel):
         # Here you can add any other parameters that you need to initialize your model
         # You might load your trained ML model or set up an optical flow method here.
         # You can also access any code from src/diffusion, e.g.
+
+        # Get the appropriate PyTorch device
+        self.device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
+
+        # Load the pretrained model
         self.model = diffusion.ConditionedUnet()
         self.model.load_state_dict(torch.load(state_dict_path, weights_only=True))
+        self.model = self.model.to(self.device)
         self.model.eval()
 
+        self.noise_scheduler = DDPMScheduler(num_train_timesteps=1000, beta_schedule="squaredcos_cap_v2")
         ############################
 
+    @staticmethod
+    def crop(x):
+        # Calculate required crop for the input dims to be divisible by 16
+        x_cropped_shape = [(size // 16) * 16 for size in x.shape[-2:]]
+        return x[..., :x_cropped_shape[0], :x_cropped_shape[1]]
 
     def forward(self, X):
         # This is where you will make predictions with your model
         # The input X is a numpy array with shape (batch_size, channels, time, height, width)
 
-        ###### YOUR CODE HERE ######
-        ...
+        # Get some data and prepare the corrupted version
+        X_torch = torch.Tensor(X, requires_grad=False)
+        X_torch = self.crop(X_torch.to(self.device) * 2 - 1)  # Data on the GPU (mapped to (-1, 1)) (????)
+
+        results = [X_torch]
+        for forecast_timestep in range(NUM_FORECAST_STEPS):
+            y_hat = self.forecast_one_step(results[-1])
+            results.append(y_hat.detach().cpu().numpy())
+
+        return np.concatenate(results[1:], axis=2)
+
+
+    def forecast_one_step(self, X: torch.Tensor) -> torch.Tensor:
+        # Random noise with shape (batch_size, channels, 1, height, width)
+        sampled_noise = torch.randn(X.shape[0], X.shape[1], 1, X.shape[3], X.shape[4]).to(self.device)
+
+        # Sampling loop
+        print("starting denoising loop")
+        for idx, t in enumerate(self.noise_scheduler.timesteps):
+
+            # Get model pred
+            with torch.no_grad():
+                residual = self.model(sampled_noise, X, t)
+            print(f"... obtained residual for step {idx}")
+
+            # Update sample with step
+            sampled_noise = self.noise_scheduler.step(residual, t, sampled_noise).prev_sample
+            print(f"... updated sampled noise for step {idx}")
+
+        return sampled_noise
+
 
 
     def hyperparameters_dict(self):
@@ -41,4 +87,4 @@ class DiffusionModel(AbstractModel):
         # This is just for your own reference and will be saved with the model scores to wandb
 
         ###### YOUR CODE HERE ######
-        ...
+        pass
