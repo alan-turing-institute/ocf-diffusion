@@ -49,9 +49,9 @@ class DiffusionModel(AbstractModel):
         """Crop to a smaller array than the input"""
         return x[..., :self.cropped_image_size[0], :self.cropped_image_size[1]]
 
-    def uncrop(self, x: torch.Tensor) -> torch.Tensor:
-        """Uncrop to a larger array than the input, filling with zeros"""
-        output = torch.zeros(*x.shape[:-2], IMAGE_SIZE_TUPLE[0], IMAGE_SIZE_TUPLE[1])
+    def uncrop(self, x: torch.Tensor, *, target: torch.Tensor) -> torch.Tensor:
+        """Uncrop to a larger array than the input, filling with information from the target"""
+        output = target.detach().clone()
         output[..., :x.shape[-2], :x.shape[-1]] = x
         return output
 
@@ -59,23 +59,28 @@ class DiffusionModel(AbstractModel):
         # This is where you will make predictions with your model
         # The input X is a numpy array with shape (batch_size, channels, time, height, width)
 
-        # Load data onto the GPU, crop to size and transform range to (-1, 1)
-        X_torch = self.crop(torch.from_numpy(X).to(self.device) * 2 - 1)
+        # Load data onto the GPU and transform range to (-1, 1)
+        X_torch = torch.from_numpy(X).to(self.device) * 2 - 1
+        print(f"Running forward step using an input of shape: {X_torch.shape}")
+
+        # Crop to size
+        X_torch_cropped = self.crop(X_torch)
+        print(f"Cropping to an appropriate shape: {X_torch_cropped.shape}")
 
         # Forecast the next timestep taking the previous timestep as input
-        tensors = [X_torch]
+        tensors = [X_torch_cropped]
         for forecast_timestep in range(NUM_FORECAST_STEPS):
             print(f"Starting denoising loop for forecast {forecast_timestep + 1} / {NUM_FORECAST_STEPS}")
             y_hat_torch = self.forecast_one_timestep(tensors[-1])
             tensors.append(y_hat_torch)
 
         # Convert results to the expected output format by doing the following:
-        # - uncrop back to the original size (filling missing values with zeros)
+        # - uncrop back to the original size (filling missing values with values from input)
         # - convert back to the range (0, 1)
         # - convert from Tensor to numpy array
         # - drop the input from the list of results
         # - concatenate the forecasts along the time axis
-        results = [((self.uncrop(y_hat) + 1) / 2).detach().cpu().numpy() for y_hat in tensors[1:]]
+        results = [((self.uncrop(y_hat, target=X_torch) + 1) / 2).detach().cpu().numpy() for y_hat in tensors[1:]]
         output = np.concatenate(results, axis=2)
         print(f"Returning {output.shape} {type(output)}")
         return output
