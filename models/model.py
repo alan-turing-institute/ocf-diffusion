@@ -46,10 +46,14 @@ class DiffusionModel(AbstractModel):
         ############################
 
     def crop(self, x: torch.Tensor) -> torch.Tensor:
+        """Crop to a smaller array than the input"""
         return x[..., :self.cropped_image_size[0], :self.cropped_image_size[1]]
 
     def uncrop(self, x: torch.Tensor) -> torch.Tensor:
-        return x[..., :IMAGE_SIZE_TUPLE[0], :IMAGE_SIZE_TUPLE[1]]
+        """Uncrop to a larger array than the input, filling with zeros"""
+        output = torch.zeros(*x.shape[:-2], IMAGE_SIZE_TUPLE[0], IMAGE_SIZE_TUPLE[1])
+        output[..., :x.shape[-2], :x.shape[-1]] = x
+        return output
 
     def forward(self, X):
         # This is where you will make predictions with your model
@@ -85,17 +89,16 @@ class DiffusionModel(AbstractModel):
         print(f"-> Noise: {sampled_noise.shape} {type(sampled_noise)}")
 
         # Sampling loop
-        for idx, t in enumerate(tqdm.tqdm(self.noise_scheduler.timesteps)):
+        for t in tqdm.tqdm(self.noise_scheduler.timesteps):
 
-            # Get model pred
+            # Get the model prediction for residual noise
             with torch.no_grad():
                 residual = self.model(sampled_noise, X, t)
-            print(f"... obtained residual for step {idx} / {self.noise_scheduler.timesteps.shape[0]}")
 
-            # Update sample with step
+            # Combine the residual with the input to generate the input for the next step
             sampled_noise = self.noise_scheduler.step(residual, t, sampled_noise).prev_sample
-            print(f"... updated sampled noise for step {idx} / {self.noise_scheduler.timesteps.shape[0]}")
 
+        print(f"-> Output: {sampled_noise.shape} {type(sampled_noise)}")
         return sampled_noise
 
 
